@@ -1,5 +1,4 @@
-
-import React, { FormEvent, useState, useEffect } from "react";
+import React, { FormEvent, useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
 export type TMessage = {
@@ -15,7 +14,7 @@ type ChatPanelProps = {
 
 const API_URL = "https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct";
 const headers = {
-  "Authorization": process.env.AUTH
+  "Authorization": "Bearer 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"
 };
 
 export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) => {
@@ -23,6 +22,39 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [lastReceivedMessage, setLastReceivedMessage] = useState<string>("");
   const [processedMessages, setProcessedMessages] = useState<string[]>([]);
+
+  const toxicity = async (data: { inputs: string }) => {
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/s-nlp/roberta_toxicity_classifier",
+      {
+        headers: {
+          Authorization:"Bearer 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",
+          'Content-Type': 'application/json'
+        },
+        method: "POST",
+        body: JSON.stringify(data)
+      }
+    );
+    const result = await response.json();
+    return result;
+  };
+
+  const checkToxicity = useCallback(async (messageFromUser: string): Promise<string> => {
+    try {
+      const response = await toxicity({ "inputs": messageFromUser });
+      const scores = response[0];
+      const toxicLabel = scores.find((score: { label: string, score: number }) => score.label === "toxic");
+
+      if (toxicLabel && toxicLabel.score > 0.5) {
+        return "This message cannot be displayed";
+      } else {
+        return messageFromUser;
+      }
+    } catch (error) {
+      console.error("Error checking toxicity:", error);
+      return "An error occurred while checking the message";
+    }
+  }, []);
 
   useEffect(() => {
     const checkMessages = async () => {
@@ -39,7 +71,7 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
     };
 
     checkMessages();
-  }, [messages]);
+  }, [messages, checkToxicity]);
 
   useEffect(() => {
     const lastMessage = messages.filter(message => message.userId !== userId).pop();
@@ -65,57 +97,12 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
     return matches ? matches.map(match => match.replace(/"/g, "")) : [];
   };
 
-
-  async function toxicity(data) {
-  //   const response = await fetch(
-  //     "https://api-inference.huggingface.co/models/s-nlp/roberta_toxicity_classifier",
-  //     {
-  //       headers: { Authorization: process.env.AUTH  },
-  //       method: "POST",
-  //       body: JSON.stringify(data),
-  //     }
-  //   );
-
-
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/s-nlp/roberta_toxicity_classifier", {
-      headers: {
-        Authorization: process.env.AUTH || '',
-        'Content-Type': 'application/json'
-      },
-      method: "POST",
-      body: JSON.stringify(data)
-    });
-    const result = await response.json();
-    return result;
-  }
-  
-
-  const checkToxicity = async (messageFromUser: string): Promise<string> => {
-    try {
-      const response = await toxicity({ "inputs": messageFromUser });
-      const scores = response[0];
-      
-      const toxicLabel = scores.find(score => score.label === "toxic");
-      
-      if (toxicLabel && toxicLabel.score > 0.5) {
-        return "This message cannot be displayed";
-      } else {
-        return messageFromUser;
-      }
-    } catch (error) {
-      console.error("Error checking toxicity:", error);
-      return "An error occurred while checking the message";
-    }
-  };
-
   const handleGenerateSuggestions = async () => {
     const messageToProcess = lastReceivedMessage || "Give a beautiful pickup line to start a conversation.";
     const apiResponse = await queryAPI(messageToProcess);
     if (apiResponse && apiResponse[0]?.generated_text) {
       const generatedText = apiResponse[0].generated_text;
       const suggestions = parseResponse(generatedText);
-      
       setSuggestions(suggestions);
     }
   };
@@ -137,6 +124,7 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
   const convertToYouThem = (message: TMessage) => {
     return message.userId === userId ? "You" : "Them";
   };
+
   return (
     <div
       className="chat-panel"
@@ -258,5 +246,4 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
       </form>
     </div>
   );
-  };
- 
+};

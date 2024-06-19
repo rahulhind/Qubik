@@ -1,10 +1,8 @@
 import Head from "next/head";
 import React, { useEffect, useRef, useState } from "react";
 import ChatRoom from "./components/GlobalChat"
-import styles from "../styles/Home.module.css";
 import { VideoPanel } from "./components/VideoPanel";
 import { ChatPanel } from "./components/ChatPannel";
-import AgoraRTC, {UID} from 'agora-rtc-sdk-ng';
 
 import { createRoom, getRandomRoom , addUserToRoom, removeUserFromRoom, updateRoomStatus} from "./api/rooms/roomAPI";
 import { connectToAgoraRtc, connectToAgoraRtm } from "./utils/agoraConnections";
