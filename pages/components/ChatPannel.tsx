@@ -15,7 +15,7 @@ type ChatPanelProps = {
 
 const API_URL = "https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct";
 const headers = {
-  "Authorization": "Bearer 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"
+  "Authorization": process.env.AUTH
 };
 
 export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) => {
@@ -67,14 +67,25 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
 
 
   async function toxicity(data) {
+  //   const response = await fetch(
+  //     "https://api-inference.huggingface.co/models/s-nlp/roberta_toxicity_classifier",
+  //     {
+  //       headers: { Authorization: process.env.AUTH  },
+  //       method: "POST",
+  //       body: JSON.stringify(data),
+  //     }
+  //   );
+
+
     const response = await fetch(
-      "https://api-inference.huggingface.co/models/s-nlp/roberta_toxicity_classifier",
-      {
-        headers: { Authorization: "Bearer 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" },
-        method: "POST",
-        body: JSON.stringify(data),
-      }
-    );
+      "https://api-inference.huggingface.co/models/s-nlp/roberta_toxicity_classifier", {
+      headers: {
+        Authorization: process.env.AUTH || '',
+        'Content-Type': 'application/json'
+      },
+      method: "POST",
+      body: JSON.stringify(data)
+    });
     const result = await response.json();
     return result;
   }
