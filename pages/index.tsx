@@ -1,26 +1,20 @@
 import Head from "next/head";
 import React, { useEffect, useRef, useState } from "react";
-import ChatRoom from "../components/GlobalChat"
+import ChatRoom from "../components/GlobalChat";
 import { VideoPanel } from "../components/VideoPanel";
 import { ChatPanel } from "../components/ChatPannel";
-
-import { createRoom, getRandomRoom , addUserToRoom, removeUserFromRoom, updateRoomStatus} from "./api/rooms/roomAPI";
+import { createRoom, getRandomRoom, addUserToRoom, removeUserFromRoom, updateRoomStatus } from "./api/rooms/roomAPI";
 import { connectToAgoraRtc, connectToAgoraRtm } from "../utils/agoraConnections";
-import {
-  ICameraVideoTrack,
-  IRemoteVideoTrack,
-  IAgoraRTCClient,
-  IRemoteAudioTrack,
-} from "agora-rtc-sdk-ng";
+import { ICameraVideoTrack, IRemoteVideoTrack, IAgoraRTCClient, IRemoteAudioTrack } from "agora-rtc-sdk-ng";
 import { RtmChannel } from "agora-rtm-sdk";
-// import { log } from "console";
-// import axios from "axios";
+
 type Room = {
   _id: string;
-  status: "waiting" | "chatting" | "inactive"; 
-  users: string[]; 
-  size?: number; 
+  status: "waiting" | "chatting" | "inactive";
+  users: string[];
+  size?: number;
 };
+
 type TMessage = {
   userId: string;
   message?: string;
@@ -37,50 +31,24 @@ export default function Home() {
   const rtcClientRef = useRef<IAgoraRTCClient>();
   const [client, setClient] = useState<IAgoraRTCClient | null>(null);
 
-  // useEffect(() => {
-  //   const handleVisibilityChange = () => {
-  //     if (document.visibilityState === 'hidden') {
-  //       alert('User has switched tabs');
-  //     } else {
-  //       alert('User is back to the tab');
-  //     }
-  //   };
-
-  //   const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-  //    event.preventDefault();
-  //     event.returnValue = '';
-      
-  //     if (room) {
-  //       try {
-  //         // Call your custom functions here
-  //          removeUserFromRoom(room._id, userId);
-  //          updateRoomStatus(room._id, 'waiting');
-  //       } catch (error) {
-  //         console.error(`Error updating current room: ${error}`);
-  //       }
-  //     }
-    
-  // return 'Are you sure you want to leave?'; 
-  //   };
-
-  //   document.addEventListener('visibilitychange', handleVisibilityChange);
-  //   window.addEventListener('beforeunload', handleBeforeUnload);
-
-  //   return () => {
-  //     document.removeEventListener('visibilitychange', handleVisibilityChange);
-  //     window.removeEventListener('beforeunload', handleBeforeUnload);
-  //   };
-  // }, []);
+  const logError = (error: Error, context: string) => {
+    console.error(`Error in ${context}: ${error.message}`);
+    // Add any additional logging or error reporting here (e.g., send to an error monitoring service)
+  };
 
   async function handleSubmitMessage(message: string) {
-    await channelRef.current?.sendMessage({ text: message });
-    setMessages((cur) => [
-      ...cur,
-      {
-        userId,
-        message,
-      },
-    ]);
+    try {
+      await channelRef.current?.sendMessage({ text: message });
+      setMessages((cur) => [
+        ...cur,
+        {
+          userId,
+          message,
+        },
+      ]);
+    } catch (error) {
+      logError(error as Error, "handleSubmitMessage");
+    }
   }
 
   async function connectToARoom() {
@@ -89,82 +57,87 @@ export default function Home() {
     setMyVideo(null);
     setMessages([]);
 
-    if (channelRef.current) {
-      await channelRef.current.leave();
-    }
-
-    if (rtcClientRef.current) {
-      await rtcClientRef.current.leave();
-    }
-
-    if (room) {
-      try {
-        await removeUserFromRoom(room._id, userId);
-      } catch (error) {
-        console.error(`Error updating current room: ${error}`);
+    try {
+      if (channelRef.current) {
+        await channelRef.current.leave();
       }
-    }
 
-    const response = await getRandomRoom(userId);
-    if (room) {
-      try {
-        await updateRoomStatus(room._id, 'waiting');
-      } catch (error) {
-        console.error(`Error updating current room: ${error}`);
+      if (rtcClientRef.current) {
+        await rtcClientRef.current.leave();
       }
-    }
-    if (response && response.rooms && response.rooms.length > 0) {
-      const firstRoom = response.rooms[0];
-      setRoom(firstRoom);
 
-      try {
-        await addUserToRoom(firstRoom._id, userId);
-
-        const { channel } = await connectToAgoraRtm(
-          firstRoom._id,
-          userId,
-          (message: TMessage) => setMessages((cur) => [...cur, message]),
-          response.rtmToken
-        );
-        channelRef.current = channel;
-
-        const { tracks, client } = await connectToAgoraRtc(
-          firstRoom._id,
-          userId,
-          (track: IRemoteVideoTrack | null) => setThemVideo(track),
-          (track: ICameraVideoTrack) => setMyVideo(track),
-          (track: IRemoteAudioTrack | null) => setThemAudio(track),
-          response.rtcToken
-        );
-        rtcClientRef.current = client;
-      } catch (error) {
-        console.error(`Error connecting to the new room: ${error}`);
+      if (room) {
+        try {
+          await removeUserFromRoom(room._id, userId);
+        } catch (error) {
+          logError(error as Error, "connectToARoom - removeUserFromRoom");
+        }
       }
-    } else {
-      try {
-        const { room, rtcToken, rtmToken } = await createRoom(userId);
-        setRoom(room);
 
-        const { channel } = await connectToAgoraRtm(
-          room._id,
-          userId,
-          (message: TMessage) => setMessages((cur) => [...cur, message]),
-          rtmToken
-        );
-        channelRef.current = channel;
-
-        const { tracks, client } = await connectToAgoraRtc(
-          room._id,
-          userId,
-          (track: IRemoteVideoTrack | null) => setThemVideo(track),
-          (track: ICameraVideoTrack) => setMyVideo(track),
-          (track: IRemoteAudioTrack | null) => setThemAudio(track),
-          rtcToken
-        );
-        rtcClientRef.current = client;
-      } catch (error) {
-        console.error(`Error creating or connecting to the new room: ${error}`);
+      const response = await getRandomRoom(userId);
+      if (room) {
+        try {
+          await updateRoomStatus(room._id, 'waiting');
+        } catch (error) {
+          logError(error as Error, "connectToARoom - updateRoomStatus");
+        }
       }
+
+      if (response && response.rooms && response.rooms.length > 0) {
+        const firstRoom = response.rooms[0];
+        setRoom(firstRoom);
+
+        try {
+          await addUserToRoom(firstRoom._id, userId);
+
+          const { channel } = await connectToAgoraRtm(
+            firstRoom._id,
+            userId,
+            (message: TMessage) => setMessages((cur) => [...cur, message]),
+            response.rtmToken
+          );
+          channelRef.current = channel;
+
+          const { tracks, client } = await connectToAgoraRtc(
+            firstRoom._id,
+            userId,
+            (track: IRemoteVideoTrack | null) => setThemVideo(track),
+            (track: ICameraVideoTrack) => setMyVideo(track),
+            (track: IRemoteAudioTrack | null) => setThemAudio(track),
+            response.rtcToken
+          );
+          rtcClientRef.current = client;
+        } catch (error) {
+          logError(error as Error, "connectToARoom - connect to room");
+        }
+      } else {
+        try {
+          const { room, rtcToken, rtmToken } = await createRoom(userId);
+          setRoom(room);
+
+          const { channel } = await connectToAgoraRtm(
+            room._id,
+            userId,
+            (message: TMessage) => setMessages((cur) => [...cur, message]),
+            rtmToken
+          );
+          channelRef.current = channel;
+
+          const { tracks, client } = await connectToAgoraRtc(
+            room._id,
+            userId,
+            (track: IRemoteVideoTrack | null) => setThemVideo(track),
+            (track: ICameraVideoTrack) => setMyVideo(track),
+            (track: IRemoteAudioTrack | null) => setThemAudio(track),
+            rtcToken
+          );
+          rtcClientRef.current = client;
+        } catch (error) {
+          logError(error as Error, "connectToARoom - create room");
+        }
+      }
+    } catch (error) {
+      logError(error as Error, "connectToARoom");
     }
   }
 

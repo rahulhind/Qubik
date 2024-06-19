@@ -1,4 +1,4 @@
-import React, { FormEvent, useState, useEffect, useCallback } from "react";
+import React, { FormEvent, useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 export type TMessage = {
@@ -14,7 +14,7 @@ type ChatPanelProps = {
 
 const API_URL = "https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct";
 const headers = {
-  "Authorization": "Bearer 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"
+  "Authorization": "Bearer hf_OtHdbounXlhdWExFXQALdltPbvbTwGPsjky"
 };
 
 export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) => {
@@ -22,56 +22,35 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [lastReceivedMessage, setLastReceivedMessage] = useState<string>("");
   const [processedMessages, setProcessedMessages] = useState<string[]>([]);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  const toxicity = async (data: { inputs: string }) => {
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/s-nlp/roberta_toxicity_classifier",
-      {
-        headers: {
-          Authorization:"Bearer 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",
-          'Content-Type': 'application/json'
-        },
-        method: "POST",
-        body: JSON.stringify(data)
-      }
-    );
-    const result = await response.json();
-    return result;
-  };
-
-  const checkToxicity = useCallback(async (messageFromUser: string): Promise<string> => {
-    try {
-      const response = await toxicity({ "inputs": messageFromUser });
-      const scores = response[0];
-      const toxicLabel = scores.find((score: { label: string, score: number }) => score.label === "toxic");
-
-      if (toxicLabel && toxicLabel.score > 0.5) {
-        return "This message cannot be displayed";
-      } else {
-        return messageFromUser;
-      }
-    } catch (error) {
-      console.error("Error checking toxicity:", error);
-      return "An error occurred while checking the message";
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, []);
+  }, [messages]);
 
   useEffect(() => {
     const checkMessages = async () => {
-      const checkedMessages = await Promise.all(
-        messages.map(async (message) => {
-          if (message.message) {
-            return await checkToxicity(message.message);
-          } else {
-            return "This message is undefined";
-          }
-        })
-      );
-      setProcessedMessages(checkedMessages);
+      try {
+        const checkedMessages = await Promise.all(
+          messages.map(async (message) => {
+            if (message.message) {
+              return await checkToxicity(message.message);
+            } else {
+              return "This message is undefined";
+            }
+          })
+        );
+        setProcessedMessages(checkedMessages);
+      } catch (error) {
+        console.error("Error checking messages:", error);
+        setProcessedMessages(messages.map(() => "An error occurred while checking the message"));
+      }
     };
 
     checkMessages();
-  }, [messages, checkToxicity]);
+  }, [messages]);
 
   useEffect(() => {
     const lastMessage = messages.filter(message => message.userId !== userId).pop();
@@ -97,13 +76,56 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
     return matches ? matches.map(match => match.replace(/"/g, "")) : [];
   };
 
+  async function toxicity(data) {
+    try {
+      const response = await fetch(
+        "https://api-inference.huggingface.co/models/s-nlp/roberta_toxicity_classifier",
+        {
+          headers: { Authorization: "Bearer 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" },
+          method: "POST",
+          body: JSON.stringify(data),
+        }
+      );
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Error in toxicity function:", error);
+      throw error;  // rethrow the error to be caught in the caller function
+    }
+  }
+
+  const checkToxicity = async (messageFromUser: string): Promise<string> => {
+    try {
+      const response = await toxicity({ "inputs": messageFromUser });
+      const scores = response[0];
+      const toxicLabel = scores.find(score => score.label === "toxic");
+
+      if (toxicLabel && toxicLabel.score > 0.5) {
+        return "This message cannot be displayed";
+      } else {
+        return messageFromUser;
+      }
+    } catch (error) {
+      console.error("Error checking toxicity:", error);
+      return "An error occurred while checking the message";
+    }
+  };
+
   const handleGenerateSuggestions = async () => {
-    const messageToProcess = lastReceivedMessage || "Give a beautiful pickup line to start a conversation.";
-    const apiResponse = await queryAPI(messageToProcess);
-    if (apiResponse && apiResponse[0]?.generated_text) {
-      const generatedText = apiResponse[0].generated_text;
-      const suggestions = parseResponse(generatedText);
-      setSuggestions(suggestions);
+    try {
+      const messageToProcess = lastReceivedMessage || "Give a beautiful pickup line to start a conversation.";
+      const apiResponse = await queryAPI(messageToProcess);
+      if (apiResponse && apiResponse[0]?.generated_text) {
+        const generatedText = apiResponse[0].generated_text;
+        const suggestions = parseResponse(generatedText);
+        setSuggestions(suggestions);
+      } else {
+        console.error('No generated text found in API response');
+      }
+    } catch (error) {
+      console.error("Error generating suggestions:", error);
     }
   };
 
@@ -113,6 +135,13 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
       onMessageSend(input.trim());
       setInput("");
       setSuggestions([]);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as unknown as FormEvent);
     }
   };
 
@@ -127,17 +156,16 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
 
   return (
     <div
-      className="chat-panel"
+      className="flex flex-col w-full md:w-1/3 bg-white dark:bg-gray-800 p-4"
       style={{
-        backgroundColor: "#1c1c1c",
         padding: "20px",
         borderRadius: "10px",
         display: "flex",
         flexDirection: "column",
         gap: "15px",
-        width: "100%", 
-        maxWidth: "600px", 
-        margin: "0 auto", 
+        width: "100%",
+        maxWidth: "600px",
+        margin: "0 auto",
       }}
     >
       {suggestions.length > 0 && (
@@ -167,33 +195,26 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
           </ul>
         </div>
       )}
-  
-      <ul
-        style={{
-          listStyle: "none",
-          margin: 0,
-          padding: 0,
-          flex: 1,
-          overflowY: "auto",
-        }}
-      >
-         {processedMessages.map((message, idx) => (
-        <li
-          key={idx}
-          style={{
-            margin: "5px 0",
-            padding: "8px",
-            borderRadius: "8px",
-            backgroundColor: "#2b2b2b",
-          }}
-        >
-          <strong>{convertToYouThem(messages[idx])}:</strong> {message}
-        </li>
-      ))}
-      </ul>
-  
+
+      <div ref={chatContainerRef} className="flex-grow overflow-y-auto">
+        {processedMessages.map((message, idx) => (
+          <div
+            key={idx}
+            style={{
+              margin: "5px 0",
+              padding: "8px",
+              borderRadius: "8px",
+              backgroundColor: "#2b2b2b",
+            }}
+          >
+            <strong>{convertToYouThem(messages[idx])}:</strong> {message}
+          </div>
+        ))}
+      </div>
+
       <form
         onSubmit={handleSubmit}
+        className="flex border-t border-gray-300 dark:border-gray-600 p-2 bg-white dark:bg-gray-800 fixed bottom-0 w-full md:static"
         style={{
           flex: "0 0 auto",
           display: "flex",
@@ -206,6 +227,8 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          className="flex-grow border border-gray-300 dark:border-gray-600 p-2 rounded-l bg-white dark:bg-gray-700 text-black dark:text-white"
+          placeholder="Type a message..."
           style={{
             flex: 1,
             padding: "8px",
@@ -218,6 +241,7 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
         />
         <button
           type="submit"
+          className="bg-blue-500 text-white px-4 py-2 rounded-r"
           style={{
             padding: "6px 12px",
             borderRadius: "8px",
@@ -232,6 +256,7 @@ export const ChatPanel = ({ messages, userId, onMessageSend }: ChatPanelProps) =
         <button
           type="button"
           onClick={handleGenerateSuggestions}
+          className="bg-blue-500 text-white px-4 py-2 rounded-r"
           style={{
             padding: "6px 12px",
             borderRadius: "8px",

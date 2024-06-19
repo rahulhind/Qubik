@@ -10,14 +10,18 @@ type VideoPanelProps = {
 export const VideoPanel = ({ myVideo, themVideo }: VideoPanelProps) => {
   const [videoEnabled, setVideoEnabled] = useState(true);
 
+  const logError = (error: Error, context: string) => {
+    console.error(`Error in ${context}: ${error.message}`);
+    // Add any additional logging or error reporting here (e.g., send to an error monitoring service)
+  };
+
   const toggleAudio = () => {
     if (myVideo) {
       try {
         myVideo.getMediaStreamTrack().enabled = videoEnabled;
-        myVideo.off
         setVideoEnabled(!videoEnabled);
       } catch (error) {
-        console.error("Error toggling audio:", error);
+        logError(error as Error, "toggleAudio");
       }
     }
   };
@@ -55,7 +59,6 @@ export const VideoPanel = ({ myVideo, themVideo }: VideoPanelProps) => {
     boxShadow: "0px 0px 10px rgba(0, 0, 0, 0.3)",
   };
 
-  
   const buttonStyle: CSSProperties = {
     padding: "8px 12px",
     margin: "5px",
@@ -67,8 +70,6 @@ export const VideoPanel = ({ myVideo, themVideo }: VideoPanelProps) => {
   };
 
   return (
-    <>
-        {console.log(`Getting-> ${themVideo?.getStats()}`)}
     <div
       className="video-panel"
       style={{
@@ -80,7 +81,6 @@ export const VideoPanel = ({ myVideo, themVideo }: VideoPanelProps) => {
         height: "100%",
       }}
     >
-      
       <div className="main-video-stream" style={mainPanelStyle}>
         {themVideo ? (
           <VideoPlayer style={videoPlayerStyle} videoTrack={themVideo} />
@@ -91,16 +91,12 @@ export const VideoPanel = ({ myVideo, themVideo }: VideoPanelProps) => {
         {/* Picture-in-picture (PIP) window for myVideo */}
         {myVideo && (
           <div className="floating-video-stream" style={floatingVideoStyle}>
-            {
-            
-            }
             <VideoPlayer
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
               videoTrack={myVideo}
             />
           </div>
         )}
-
 
         <div
           style={{
@@ -112,12 +108,10 @@ export const VideoPanel = ({ myVideo, themVideo }: VideoPanelProps) => {
           }}
         >
           <button style={buttonStyle} onClick={toggleAudio}>
-            {videoEnabled ? "Turn off video" : "Turn on Audio"}
+            {videoEnabled ? "Turn off video" : "Turn on Video"}
           </button>
         </div>
       </div>
-      </div>
-      </>
-      );
-    
+    </div>
+  );
 };
