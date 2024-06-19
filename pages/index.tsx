@@ -1,11 +1,11 @@
 import Head from "next/head";
 import React, { useEffect, useRef, useState } from "react";
-import ChatRoom from "./components/GlobalChat"
-import { VideoPanel } from "./components/VideoPanel";
-import { ChatPanel } from "./components/ChatPannel";
+import ChatRoom from "../components/GlobalChat"
+import { VideoPanel } from "../components/VideoPanel";
+import { ChatPanel } from "../components/ChatPannel";
 
 import { createRoom, getRandomRoom , addUserToRoom, removeUserFromRoom, updateRoomStatus} from "./api/rooms/roomAPI";
-import { connectToAgoraRtc, connectToAgoraRtm } from "./utils/agoraConnections";
+import { connectToAgoraRtc, connectToAgoraRtm } from "../utils/agoraConnections";
 import {
   ICameraVideoTrack,
   IRemoteVideoTrack,
